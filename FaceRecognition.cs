@@ -23,6 +23,7 @@ namespace Face_Recognition_project
         Image<Bgr, Byte> currentFrame;
         Capture grabber;
         HaarCascade face;
+        HaarCascade eye;
         MCvFont font = new MCvFont(FONT.CV_FONT_HERSHEY_TRIPLEX, 0.5d, 0.5d);
         Image<Gray, byte> result, TrainedFace = null;
         Image<Gray, byte> gray = null;
@@ -61,9 +62,9 @@ namespace Face_Recognition_project
         public FaceRecognition()
         {
             InitializeComponent();
-
             //załadowanie haarcascade
-            face = new HaarCascade("haarcascade_frontalface_default.xml");
+            face = new HaarCascade("haarcascade_frontalface_alt.xml");
+            eye = new HaarCascade("haarcascade_eye.xml");
             load_database();
         }
 
@@ -75,17 +76,24 @@ namespace Face_Recognition_project
             grabber.QueryFrame();
             Application.Idle += new EventHandler(FrameGrabber);
             button1.Enabled = false;
+
         }
         void FrameGrabber(object sender, EventArgs e)
         {
+
             label3.Text = "0";
             NamePersons.Add("");
 
             currentFrame = grabber.QueryFrame().Resize(800, 500, Emgu.CV.CvEnum.INTER.CV_INTER_CUBIC);
             gray = currentFrame.Convert<Gray, Byte>();
-
+            grabber.FlipHorizontal = true;
             //Funkcja wykrywająca twarz
-            MCvAvgComp[][] facesDetected = gray.DetectHaarCascade(face, 1.2, 10, Emgu.CV.CvEnum.HAAR_DETECTION_TYPE.DO_CANNY_PRUNING, new Size(20, 20));
+            MCvAvgComp[][] facesDetected = gray.DetectHaarCascade(
+                face, 
+                1.2,
+                3, 
+                Emgu.CV.CvEnum.HAAR_DETECTION_TYPE.DO_CANNY_PRUNING, 
+                new Size(100, 100));
 
             foreach (MCvAvgComp f in facesDetected[0])
             {
@@ -97,12 +105,20 @@ namespace Face_Recognition_project
 
                 if (trainingImages.ToArray().Length != 0)
                 {
-                    MCvTermCriteria termCrit = new MCvTermCriteria(ContTrain, 0.001);
-                    EigenObjectRecognizer recognizer = new EigenObjectRecognizer(trainingImages.ToArray(),labels.ToArray(),3000,ref termCrit);
-                    name = recognizer.Recognize(result);
 
+                    double threshold = trackBar1.Value;
+                    MCvTermCriteria termCrit = new MCvTermCriteria(ContTrain, 0.001);
+                    EigenObjectRecognizer recognizer = new EigenObjectRecognizer(trainingImages.ToArray(), labels.ToArray(), threshold, ref termCrit);
+                    name = recognizer.Recognize(result);
                     //Podpis
-                    currentFrame.Draw(name, ref font, new Point(f.rect.X, f.rect.Y - 10), new Bgr(Color.Yellow));
+                    if (name == "")
+                    {
+                        currentFrame.Draw("Unknown", ref font, new Point(f.rect.X, f.rect.Y - 10), new Bgr(Color.Red));
+                    }
+                    else {
+                        currentFrame.Draw(name, ref font, new Point(f.rect.X, f.rect.Y - 10), new Bgr(Color.Yellow));
+                    }
+
 
                 }
 
@@ -112,6 +128,24 @@ namespace Face_Recognition_project
                 //Liczba wykrytych twarzy
                 label3.Text = facesDetected[0].Length.ToString();
 
+            }
+            if (wykryjOczyToolStripMenuItem.Checked)
+            {
+                MCvAvgComp[][] eyesDetected = gray.DetectHaarCascade(
+                   eye,
+                   1.2,
+                   5,
+                   Emgu.CV.CvEnum.HAAR_DETECTION_TYPE.DO_CANNY_PRUNING,
+                   new Size(50, 50)
+                   );
+
+                gray.ROI = Rectangle.Empty;
+
+                foreach (MCvAvgComp ey in eyesDetected[0])
+                {
+                    Rectangle eyeRect = ey.rect;
+                    currentFrame.Draw(eyeRect, new Bgr(Color.Red), 2);
+                }
             }
             t = 0;
 
@@ -133,13 +167,11 @@ namespace Face_Recognition_project
         {
             try
             {
-                //Trained face counter
+
                 ContTrain = ContTrain + 1;
 
-                //Get a gray frame from capture device
                 gray = grabber.QueryGrayFrame().Resize(320, 240, Emgu.CV.CvEnum.INTER.CV_INTER_CUBIC);
 
-                //Face Detector
                 MCvAvgComp[][] facesDetected = gray.DetectHaarCascade(
                 face,
                 1.2,
@@ -147,7 +179,6 @@ namespace Face_Recognition_project
                 Emgu.CV.CvEnum.HAAR_DETECTION_TYPE.DO_CANNY_PRUNING,
                 new Size(20, 20));
 
-                //Action for each element detected
                 foreach (MCvAvgComp f in facesDetected[0])
                 {
                     TrainedFace = currentFrame.Copy(f.rect).Convert<Gray, byte>();
@@ -214,10 +245,20 @@ namespace Face_Recognition_project
             System.Windows.Forms.Application.Exit();
         }
 
-        private void button6_Click(object sender, EventArgs e)
+        private void wykryjZObrazuToolStripMenuItem_Click(object sender, EventArgs e)
         {
             image_detection settingsForm = new image_detection();
             settingsForm.Show();
+        }
+
+        private void button6_Click(object sender, EventArgs e)
+        {
+            trackBar1.Value = 2000;
+        }
+
+        private void exitToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            System.Windows.Forms.Application.Exit();
         }
 
     }
